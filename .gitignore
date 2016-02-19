@@ -1,6 +1,6 @@
 node_modules
-bower_components
-sftp-config.json
-_build
+dist
+test/tmp
 npm-debug.log
-.idea
+*.sublime-project
+*.sublime-workspace

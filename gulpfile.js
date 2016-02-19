@@ -15,7 +15,7 @@
  * 6. minify and copy all JS files
  * 7. copy fonts
  * 8. show build folder size
- * 
+ *
  */
 var gulp            = require('gulp'),
     browserSync     = require('browser-sync'),
@@ -23,35 +23,177 @@ var gulp            = require('gulp'),
     $               = require('gulp-load-plugins')(),
     del             = require('del'),
     runSequence     = require('run-sequence');
+    inject          = require('gulp-inject');
+    series          = require('stream-series');
+    KarmaServer     = require('karma').Server;
 
+var paths = {
+  scripts: ['app/**/*.js'],
+  css: 'app/**/*.css',
+  html: ['app/**/*.html'],
+  libs: {
+    js: [
+      'node_modules/angular/angular.min.js',
+      'node_modules/angular-route/angular-route.min.js',
+      'node_modules/angular-sanitize/angular-sanitize.min.js',
+      'libs/lodash.min.js'
+    ],
+    css: ['node_modules/materialize-css/dist/css/materialize.min.css'],
+    font: ['node_modules/materialize-css/dist/font/**']
+  },
+  dist: {
+    base: 'dist',
+    js: 'dist/js',
+    css: 'dist/css',
+    font: 'dist/font',
+    partials: 'dist/partials'
+  }
+};
 
-// optimize images
-gulp.task('images', function() {
-  return gulp.src('./images/**/*')
-    .pipe($.changed('./_build/images'))
-    .pipe($.imagemin({
-      optimizationLevel: 3,
-      progressive: true,
-      interlaced: true
-    }))
-    .pipe(gulp.dest('./_build/images'));
+// browser-sync task
+gulp.task('browser-sync', function () {
+    browserSync.init({
+      injectChanges: true,
+        server: {
+            baseDir: 'dist'
+        }
+    });
 });
 
-// browser-sync task, only cares about compiled CSS
-gulp.task('browser-sync', function() {
-  browserSync({
+// start webserver from dist folder to check how it will look in production
+gulp.task('server-build', function(done) {
+  return browserSync({
     server: {
-      baseDir: "./"
+      baseDir: 'dist'
     }
+  }, done);
+});
+
+// Concat and copy libs JS files to dist
+gulp.task('copy:libs-dev', function() {
+  return gulp.src(paths.libs.js)
+    .pipe($.concat('libs.js'))
+    .pipe(gulp.dest(paths.dist.js + '/libs'));
+});
+
+// Concat and copy libs JS files to dist
+gulp.task('copy:libs-prod', function() {
+  return gulp.src(paths.libs.js)
+    .pipe($.concat('libs.js'))
+    .pipe(gulp.dest(paths.dist.js));
+});
+
+// Concat app JS files and copy to dist
+gulp.task('copy:js-dev', function() {
+  return gulp.src(paths.scripts)
+    //.pipe($.concat('app.js'))
+    .pipe(gulp.dest(paths.dist.js));
+});
+
+// Concat, minify and copy JS files to dist
+gulp.task('copy:js-prod', function() {
+  return gulp.src(paths.scripts)
+    .pipe($.concat('app.js'))
+    .pipe($.uglify())
+    .pipe($.rename({suffix: '.min'}))
+    .pipe(gulp.dest(paths.dist.js));
+});
+
+// Copy css to dist
+gulp.task('copy:css', function() {
+  gulp.src(paths.css)
+    .pipe(gulp.dest(paths.dist.css));
+
+  gulp.src(paths.libs.css)
+    .pipe(gulp.dest(paths.dist.css));
+
+  return gulp.src(paths.libs.font)
+    .pipe(gulp.dest(paths.dist.font));
+});
+
+// Copy html to dist
+gulp.task('copy:html', function() {
+  gulp.src('index.html')
+    .pipe(gulp.dest(paths.dist.base));
+
+  return gulp.src(paths.html)
+    .pipe(gulp.dest(paths.dist.partials));
+});
+
+// Copy mock data to dist
+gulp.task('copy:data', function() {
+  return gulp.src('data.json')
+    .pipe(gulp.dest(paths.dist.base));
+});
+
+gulp.task('index:dev', function () {
+  var target = gulp.src(paths.dist.base + '/index.html');
+  var libStream = gulp.src([paths.dist.js + '/libs/libs.js', paths.dist.css + '/*.css'], {read: false});
+  var appStream = gulp.src([paths.dist.js + '/**/*.js', '!' + paths.dist.js + '/libs/libs.js'], {read: false});
+
+  return target.pipe(inject(series(libStream, appStream), {relative: true})) // This will always inject vendor files before app files
+    .pipe(gulp.dest(paths.dist.base));
+});
+
+gulp.task('index:prod', function () {
+  var target = gulp.src(paths.dist.base + '/index.html');
+  var libStream = gulp.src([paths.dist.js + '/libs.js', paths.dist.css + '/*.css'], {read: false});
+  var appStream = gulp.src([paths.dist.js + '/app.min.js'], {read: false});
+
+  return target.pipe(inject(series(libStream, appStream), {relative: true})) // This will always inject vendor files before app files
+    .pipe(gulp.dest(paths.dist.base));
+});
+
+gulp.task('build:dev', function (callback) {
+  runSequence(
+    'clean:dist',
+    'copy:libs-dev',
+    'copy:js-dev',
+    'copy:html',
+    'copy:css',
+    'copy:data',
+    'index:dev',
+    'browser-sync',
+    'watch',
+    callback);
+});
+
+gulp.task('build:prod', function (callback) {
+  runSequence(
+    'clean:dist',
+    'copy:libs-prod',
+    'copy:js-prod',
+    'copy:html',
+    'copy:css',
+    'copy:data',
+    'index:prod',
+    'server-build',
+    callback);
+});
+
+// Watch for changes
+gulp.task('watch', function () {
+  gulp.watch(paths.scripts, ['copy:js-dev', browserSync.reload]);
+  gulp.watch(paths.css, ['copy:css', browserSync.reload]);
+  gulp.watch(paths.html, function () {
+    runSequence(
+      'copy:html',
+      'index',
+      browserSync.reload
+    );
   });
 });
 
-// minify JS
-gulp.task('minify-js', function() {
-  gulp.src('js/*.js')
-    .pipe($.uglify())
-    .pipe(gulp.dest('./_build/'));
+// Broken due to a bug https://github.com/karma-runner/gulp-karma/issues/30
+gulp.task('test', function (done) {
+  new KarmaServer({
+    configFile: __dirname + '/karma.conf.js',
+    singleRun: true
+  }, done).start();
 });
+
+
+//--------------------------------------------------------------------
 
 // minify CSS
 gulp.task('minify-css', function() {
@@ -75,13 +217,6 @@ gulp.task('minify-html', function() {
     .pipe(gulp.dest('./_build/'));
 });
 
-// copy fonts from a module outside of our project (like Bower)
-gulp.task('fonts', function() {
-  gulp.src('./fonts/**/*.{ttf,woff,eof,eot,svg}')
-    .pipe($.changed('./_build/fonts'))
-    .pipe(gulp.dest('./_build/fonts'));
-});
-
 // start webserver
 gulp.task('server', function(done) {
   return browserSync({
@@ -95,25 +230,18 @@ gulp.task('server', function(done) {
 gulp.task('server-build', function(done) {
   return browserSync({
     server: {
-      baseDir: './_build/'
+      baseDir: 'dist/'
     }
   }, done);
 });
 
-// delete build folder
-gulp.task('clean:build', function (cb) {
+// delete dist folder
+gulp.task('clean:dist', function (cb) {
   del([
-    './_build/'
+    'dist/'
     // if we don't want to clean any file we can use negate pattern
     //'!dist/mobile/deploy.json'
   ], cb);
-});
-
-// concat files
-gulp.task('concat', function() {
-  gulp.src('./js/*.js')
-    .pipe($.concat('scripts.js'))
-    .pipe(gulp.dest('./_build/'));
 });
 
 // SASS task, will run when any SCSS files change & BrowserSync
@@ -199,7 +327,6 @@ gulp.task('usemin', function() {
 gulp.task('templates', function() {
   return gulp.src([
       './**/*.html',
-      '!bower_components/**/*.*',
       '!node_modules/**/*.*',
       '!_build/**/*.*'
     ])
@@ -215,32 +342,18 @@ gulp.task('bs-reload', function() {
   browserSync.reload();
 });
 
-// calculate build folder size
-gulp.task('build:size', function() {
-  var s = $.size();
-
-  return gulp.src('./_build/**/*.*')
-    .pipe(s)
-    .pipe($.notify({
-      onLast: true,
-      message: function() {
-        return 'Total build size ' + s.prettySize;
-      }
-    }));
-});
-
 
 // default task to be run with `gulp` command
 // this default task will run BrowserSync & then use Gulp to watch files.
 // when a file is changed, an event is emitted to BrowserSync with the filepath.
 gulp.task('default', ['browser-sync', 'sass', 'minify-css'], function() {
   gulp.watch('styles/*.css', function(file) {
-    if (file.type === "changed") {
+    if (file.type === 'changed') {
       reload(file.path);
     }
   });
-  gulp.watch(['*.html', 'views/*.html'], ['bs-reload']);
-  gulp.watch(['app/*.js', 'components/**/*.js', 'js/*.js'], ['bs-reload']);
+  gulp.watch(['*.html', 'app/**/*.html'], ['bs-reload']);
+  gulp.watch(['app/**/*.js', 'js/*.js'], ['build-js', 'bs-reload']);
   gulp.watch('styles/**/*.scss', ['sass', 'minify-css']);
 });
 
@@ -255,16 +368,14 @@ gulp.task('default', ['browser-sync', 'sass', 'minify-css'], function() {
  * 6. minify and copy all JS files
  * 7. copy fonts
  * 8. show build folder size
- * 
+ *
  */
-gulp.task('build', function(callback) {
+/*gulp.task('build', function(callback) {
   runSequence(
-    'clean:build',
+    'clean:dist',
     'sass:build',
-    'images',
-    'templates',
-    'usemin',
-    'fonts',
-    'build:size',
+    'build-js',
+    'copy-html',
     callback);
-});
+});*/
+

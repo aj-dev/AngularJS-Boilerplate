@@ -1,0 +1,25 @@
+<div class="row" ng-if="todosCtrl.isDataLoaded">
+	<div class="col s12">
+		<h3 class="center-align">Todo demo</h3>
+		<table class="bordered highlight">
+			<thead>
+				<tr>
+					<th>#id</th>
+					<th>Description</th>
+					<th>&nbsp;</th>
+				</tr>
+			</thead>
+			<tbody>
+				<tr ng-repeat="item in todosCtrl.items track by item.id">
+					<td>{{item.id}}</td>
+					<td>
+						<a href="#/todos/{{item.id}}">{{item.description}}</a>
+					</td>
+					<td>
+						<a href="#/todos/{{item.id}}/edit">edit</a>
+					</td>
+				</tr>
+			</tbody>
+		</table>
+	</div>
+</div>

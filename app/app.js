@@ -1,5 +1,5 @@
 /**
- * 
+ *
  * AngularJS Boilerplate
  * @description           Description
  * @author                Jozef Butko // www.jozefbutko.com/resume
@@ -7,7 +7,7 @@
  * @version               1.1.7
  * @date                  March 2015
  * @license               MIT
- * 
+ *
  */
 ;(function() {
 
@@ -30,7 +30,7 @@
    *
    * You can leave it here in the config section or take it out
    * into separate file
-   * 
+   *
    */
   function config($routeProvider, $locationProvider, $httpProvider, $compileProvider) {
 
@@ -38,23 +38,23 @@
 
     // routes
     $routeProvider
-      .when('/', {
-        templateUrl: 'views/home.html',
-        controller: 'MainController',
-        controllerAs: 'main'
+      .when('/todos', {
+        templateUrl: 'partials/todos/todos.html',
+        controller: 'Todos.Controller',
+        controllerAs: 'todosCtrl'
       })
-      .when('/contact', {
-        templateUrl: 'views/contact.html',
-        controller: 'MainController',
-        controllerAs: 'main'
+      .when('/todos/:id', {
+        templateUrl: 'partials/todos/view/todo-view.html',
+        controller: 'Todo.View.Controller',
+        controllerAs: 'todoViewCtrl'
       })
-      .when('/setup', {
-        templateUrl: 'views/setup.html',
-        controller: 'MainController',
-        controllerAs: 'main'
+      .when('/todos/:id/edit', {
+        templateUrl: 'partials/todos/edit/todo-edit.html',
+        controller: 'Todo.Edit.Controller',
+        controllerAs: 'todoEditCtrl'
       })
       .otherwise({
-        redirectTo: '/'
+        redirectTo: '/todos'
       });
 
     $httpProvider.interceptors.push('authInterceptor');
@@ -65,15 +65,15 @@
   /**
    * You can intercept any request or response inside authInterceptor
    * or handle what should happend on 40x, 50x errors
-   * 
+   *
    */
   angular
     .module('boilerplate')
     .factory('authInterceptor', authInterceptor);
 
-  authInterceptor.$inject = ['$rootScope', '$q', 'LocalStorage', '$location'];
+  authInterceptor.$inject = ['$rootScope', '$q', '$location'];
 
-  function authInterceptor($rootScope, $q, LocalStorage, $location) {
+  function authInterceptor($rootScope, $q, $location) {
 
     return {
 
